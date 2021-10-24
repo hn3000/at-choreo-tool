@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+
+const { main } = require('../out/cli');
+const process = require('process');
+
+main(process.argv);

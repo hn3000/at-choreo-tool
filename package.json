@@ -1,0 +1,28 @@
+{
+  "name": "@hn3000/at-choreo-tool",
+  "version": "1.0.0",
+  "description": "",
+  "main": "out/index.js",
+  "bin": {
+    "ats-tool": "./bin/ats-tool"
+  },
+  "scripts": {
+    "tsc": "tsc",
+    "make-playlists": "mkdir -p playlists && cd playlists && ats-tool clonable-playlists ../../choreos-released ../../choreos-wip"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hn3000/json-ref": "^1.1.1",
+    "@hn3000/filewalker": "^1.0.0"
+  },
+  "devDependencies": {
+    "@hn3000/ats-types": "git+https://github.com/hn3000/ats-types.git#next",
+    "typescript": "^4.4.4"
+  },
+  "files": [
+    "out/*.js",
+    "src/*.ts"
+  ]
+}

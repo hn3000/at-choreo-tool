@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "alwaysStrict": true,
+    "outDir": "out",
+    "moduleResolution": "node",
+    "target": "ES5",
+    "downlevelIteration": true
+  },
+  "compileOnSave": true,
+  "include": [
+    "src/**/*.ts"
+  ]
+}
