@@ -19,16 +19,29 @@ export function main(args: string[]) {
 
   const paths = restArgs.filter(x => !x.startsWith('--')) || [ '.' ];
   let sortOrder = orderByDate('-');
+  let sortField = 'date';
+  let limit = 10;
+
   options.forEach(o => {
     const [option,args = ''] = o.split('=');
-    switch (o) {
+    switch (option) {
+      case '--count':
+        limit = Number(args);
+        break;
       case '--sort':
-        let m = /^(-|+)?(.*)$/.exec(args);
+        let m = /^(-|\+)?(.*)$/.exec(args);
         const dir: SortDir|null = m[1] as SortDir;
+        sortField = m[2];
         switch (m[2]) {
-          case 'name': sortOrder = orderByName(dir || '+'); break;
+          case 'gems':
+          case 'ribbons':
+          case 'dirgems':
+          case 'barriers':
+          case 'drums':  sortOrder = orderByChoreo(m[2], dir || '-'); break;
+          case 'name':   sortOrder = orderByName(dir || '+'); break;
+          case 'length': sortOrder = orderByLength(dir || '-'); break;
           default:
-          case 'date': sortOrder = orderByDate(dir || '-'); break;
+          case 'date':   sortOrder = orderByDate(dir || '-'); break;
         }
         break;
       default:
@@ -74,6 +87,42 @@ export function main(args: string[]) {
         });
         break;
         }
+      case 'top-songs':
+        const field = choreoField(sortField);
+        const all = collection['all']['*'];
+        const choreos = all.filter(x => x.choreoEventCount > 0);
+        choreos.sort(sortOrder);
+
+        const topChoreos = choreos.slice(0,limit);
+        const lengths = {
+          songName: 0,
+          songArtist: 0,
+          choreoName: 0,
+          choreoAuthor: 0,
+        };
+        const keys = Object.keys(lengths);
+        topChoreos.forEach((choreo,i) => {
+          for (let k of keys) {
+            lengths[k] = Math.max(lengths[k], choreo[k].length);
+          }
+        });
+        for (let k of keys) {
+          lengths[k] += 1;
+        }
+        topChoreos.forEach((choreo,i) => {
+          const { songName, songArtist, songBPM, songLength, songModificationTimestamp, choreoAuthor, choreoName } = choreo;
+          console.log(
+              rp(songName, lengths.songName)
+            + rp(songArtist, lengths.songArtist)
+            + lp(`(${fmt0(songBPM)})`, 5) + ' ' 
+            + rp(choreoName, lengths.choreoName)
+            + rp(choreoAuthor, lengths.choreoAuthor)
+            + rp(`${niceTime(songLength)}`, 7)
+            +`${niceDate(songModificationTimestamp)} `
+            + `[${sortField}: ${field(choreo)}]`
+            );
+        });
+        break;
       case 'stats':
       case 'stats-extended':
       case 'statsExtended': {
@@ -83,7 +132,7 @@ export function main(args: string[]) {
           ae[1] = list.filter(x => x.choreoEventCount > 0);
           ae[1].sort(sortOrder);
         });
-        authorEntries.sort(orderByLength);
+        authorEntries.sort(orderAuthorEntriesByLength('+'));
         let totalTime = 0;
         let totalChoreos = 0;
         let totalSongs = new Set<string>();
@@ -181,7 +230,6 @@ function makePlaylist(name: string, filename: string, choreos: IChoreoEntry[], c
       m_PathID: 0
     },
   };
-
   choreos.forEach(choreo => {
     const length = choreo.songLength;
     playlist.items.push({
@@ -211,8 +259,52 @@ function makePlaylist(name: string, filename: string, choreos: IChoreoEntry[], c
 
 }
 
+function repeatToLength(p: string, n: number) {
+  const parts = new Array<string>(Math.ceil(n / p.length));
+  for (let i = 0, n = parts.length; i<n; ++i) {
+    parts[i] = p;
+  }
+  const tmp = parts.join('');
+  return tmp.substr(0, n);
+}
+
+function rp(x: string, n: number, pad = ' ') {
+  if (x.length < n) {
+    return x + repeatToLength(pad, n - x.length);
+  }
+  return x;
+}
+
+function lp(x: string, n: number, pad = ' ') {
+  if (x.length < n) {
+    return repeatToLength(pad, n - x.length) + x;
+  }
+  return x;
+}
+
+function fmt0(x?: number) {
+  return x != null ? x.toFixed(0) : '-';
+}
 function fmt2(x?: number) {
   return x != null ? x.toFixed(2) : '-';
+}
+
+function choreoField(item: string) 
+: (x: any) => number|string
+{
+  let val: (x: IChoreoEntry) => number|string;
+  switch (item) {
+    default:
+    case 'name':     val = (x: IChoreoEntry) => x.songName; break;
+    case 'length':   val = (x: IChoreoEntry) => x.songLength; break;
+    case 'date':     val = (x: IChoreoEntry) => x.songModificationTimestamp; break;
+    case 'gems':     val = (x: IChoreoEntry) => x.choreoMeta.numGemsLeft + x.choreoMeta.numGemsRight;       break;
+    case 'dirgems':  val = (x: IChoreoEntry) => x.choreoMeta.numDirGemsLeft + x.choreoMeta.numDirGemsRight; break;
+    case 'drums':    val = (x: IChoreoEntry) => x.choreoMeta.numDrumsLeft + x.choreoMeta.numDrumsRight;     break;
+    case 'ribbons':  val = (x: IChoreoEntry) => x.choreoMeta.numRibbonsLeft + x.choreoMeta.numRibbonsRight; break;
+    case 'barriers': val = (x: IChoreoEntry) => x.choreoMeta.numBarriers; break;
+  }
+  return val;
 }
 
 type SortDir = '+'|'-';
@@ -229,9 +321,33 @@ function orderByName(dir: SortDir) {
     return f * (a.songName.localeCompare(b.songName));
   }
 }
-function orderByLength(a,b) {
-  return (
-    a[1].length - b[1].length 
-    || sum(a[1].map(x => x.songLength))-sum(b[1].map(x => x.songLength))
-  );
+function orderByChoreo(item: 'gems'|'dirgems'|'drums'|'barriers'|'ribbons'|string, dir: SortDir)
+: (a: IChoreoEntry, b: IChoreoEntry) => number
+{
+  const f = dir == '-' ? -1 : 1;
+
+  const val = choreoField(item) as (x: any) => number;
+  return function orderByChoreoX(a: IChoreoEntry, b: IChoreoEntry) {
+    const valA = val(a);
+    const valB = val(b); 
+    return f * (valA - valB);
+  }
+}
+function orderAuthorEntriesByLength(dir: SortDir) {
+  const f = dir == '-' ? -1 : 1;
+
+  return function orderAEByLengthX(a,b) {
+    return f * (
+      a[1].length - b[1].length 
+      || sum(a[1].map(x => x.songLength))-sum(b[1].map(x => x.songLength))
+    );
+  }
+}
+
+function orderByLength(dir: SortDir) {
+  const f = dir == '-' ? -1 : 1;
+
+  return function orderByLengthX(a,b) {
+    return f * (a.songLength - b.songLength);
+  }
 }

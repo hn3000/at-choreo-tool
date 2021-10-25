@@ -24,6 +24,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 };
+var __values = (this && this.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = void 0;
 var index_1 = require("./index");
@@ -38,15 +49,31 @@ function main(args) {
     var options = restArgs.filter(function (x) { return x.startsWith('--'); });
     var paths = restArgs.filter(function (x) { return !x.startsWith('--'); }) || ['.'];
     var sortOrder = orderByDate('-');
+    var sortField = 'date';
+    var limit = 10;
     options.forEach(function (o) {
         var _a = __read(o.split('='), 2), option = _a[0], _b = _a[1], args = _b === void 0 ? '' : _b;
-        switch (o) {
+        switch (option) {
+            case '--count':
+                limit = Number(args);
+                break;
             case '--sort':
-                var m = /^(-|+)?(.*)$/.exec(args);
+                var m = /^(-|\+)?(.*)$/.exec(args);
                 var dir = m[1];
+                sortField = m[2];
                 switch (m[2]) {
+                    case 'gems':
+                    case 'ribbons':
+                    case 'dirgems':
+                    case 'barriers':
+                    case 'drums':
+                        sortOrder = orderByChoreo(m[2], dir || '-');
+                        break;
                     case 'name':
                         sortOrder = orderByName(dir || '+');
+                        break;
+                    case 'length':
+                        sortOrder = orderByLength(dir || '-');
                         break;
                     default:
                     case 'date':
@@ -64,6 +91,7 @@ function main(args) {
         { key: 'all', field: { getValue: function () { return '*'; } } },
     ]), 2), collection = _b[0], collectorCB = _b[1];
     var doneCB = function () {
+        var e_1, _a;
         switch (cmd) {
             case 'dumpinfo':
                 console.log(JSON.stringify(collection, null, 2));
@@ -73,11 +101,11 @@ function main(args) {
             case 'widest':
                 break;
             case 'csv-songs': {
-                var all = collection['all']['*'];
-                var choreos = all.filter(function (x) { return x.choreoEventCount > 0; });
-                choreos.sort(sortOrder);
+                var all_1 = collection['all']['*'];
+                var choreos_1 = all_1.filter(function (x) { return x.choreoEventCount > 0; });
+                choreos_1.sort(sortOrder);
                 var map_1 = new Map();
-                choreos.forEach(function (k) {
+                choreos_1.forEach(function (k) {
                     var song = "\"" + k.songName + "\",\"" + k.songArtist + "\"";
                     if (!map_1.has(song)) {
                         map_1.set(song, []);
@@ -95,6 +123,60 @@ function main(args) {
                 });
                 break;
             }
+            case 'top-songs':
+                var field_1 = choreoField(sortField);
+                var all = collection['all']['*'];
+                var choreos = all.filter(function (x) { return x.choreoEventCount > 0; });
+                choreos.sort(sortOrder);
+                var topChoreos = choreos.slice(0, limit);
+                var lengths_1 = {
+                    songName: 0,
+                    songArtist: 0,
+                    choreoName: 0,
+                    choreoAuthor: 0,
+                };
+                var keys_2 = Object.keys(lengths_1);
+                topChoreos.forEach(function (choreo, i) {
+                    var e_2, _a;
+                    try {
+                        for (var keys_3 = __values(keys_2), keys_3_1 = keys_3.next(); !keys_3_1.done; keys_3_1 = keys_3.next()) {
+                            var k = keys_3_1.value;
+                            lengths_1[k] = Math.max(lengths_1[k], choreo[k].length);
+                        }
+                    }
+                    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                    finally {
+                        try {
+                            if (keys_3_1 && !keys_3_1.done && (_a = keys_3.return)) _a.call(keys_3);
+                        }
+                        finally { if (e_2) throw e_2.error; }
+                    }
+                });
+                try {
+                    for (var keys_1 = __values(keys_2), keys_1_1 = keys_1.next(); !keys_1_1.done; keys_1_1 = keys_1.next()) {
+                        var k = keys_1_1.value;
+                        lengths_1[k] += 1;
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (keys_1_1 && !keys_1_1.done && (_a = keys_1.return)) _a.call(keys_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                topChoreos.forEach(function (choreo, i) {
+                    var songName = choreo.songName, songArtist = choreo.songArtist, songBPM = choreo.songBPM, songLength = choreo.songLength, songModificationTimestamp = choreo.songModificationTimestamp, choreoAuthor = choreo.choreoAuthor, choreoName = choreo.choreoName;
+                    console.log(rp(songName, lengths_1.songName)
+                        + rp(songArtist, lengths_1.songArtist)
+                        + lp("(" + fmt0(songBPM) + ")", 5) + ' '
+                        + rp(choreoName, lengths_1.choreoName)
+                        + rp(choreoAuthor, lengths_1.choreoAuthor)
+                        + rp("" + (0, utils_1.niceTime)(songLength), 7)
+                        + ((0, utils_1.niceDate)(songModificationTimestamp) + " ")
+                        + ("[" + sortField + ": " + field_1(choreo) + "]"));
+                });
+                break;
             case 'stats':
             case 'stats-extended':
             case 'statsExtended': {
@@ -104,7 +186,7 @@ function main(args) {
                     ae[1] = list.filter(function (x) { return x.choreoEventCount > 0; });
                     ae[1].sort(sortOrder);
                 });
-                authorEntries.sort(orderByLength);
+                authorEntries.sort(orderAuthorEntriesByLength('+'));
                 var totalTime_1 = 0;
                 var totalChoreos_1 = 0;
                 var totalSongs_1 = new Set();
@@ -131,9 +213,11 @@ function main(args) {
                 console.log("total\t" + totalSongs_1.size + " songs\t" + totalChoreos_1 + " choreos\t" + (0, utils_1.niceTime)(totalTime_1));
                 break;
             }
+            case 'create-playlists':
+            case 'clonable-playlists':
             case 'createPlaylists':
             case 'clonablePlaylists':
-                var clonable_1 = cmd === 'clonablePlaylists';
+                var clonable_1 = cmd.startsWith('clonable');
                 var allChoreos_1 = [];
                 Object.keys(collection['author']).forEach(function (author) {
                     var choreosAll = collection['author'][author];
@@ -212,8 +296,64 @@ function makePlaylist(name, filename, choreos, clonable) {
         err && console.log('failed to write playlist', err);
     });
 }
+function repeatToLength(p, n) {
+    var parts = new Array(Math.ceil(n / p.length));
+    for (var i = 0, n_1 = parts.length; i < n_1; ++i) {
+        parts[i] = p;
+    }
+    var tmp = parts.join('');
+    return tmp.substr(0, n);
+}
+function rp(x, n, pad) {
+    if (pad === void 0) { pad = ' '; }
+    if (x.length < n) {
+        return x + repeatToLength(pad, n - x.length);
+    }
+    return x;
+}
+function lp(x, n, pad) {
+    if (pad === void 0) { pad = ' '; }
+    if (x.length < n) {
+        return repeatToLength(pad, n - x.length) + x;
+    }
+    return x;
+}
+function fmt0(x) {
+    return x != null ? x.toFixed(0) : '-';
+}
 function fmt2(x) {
     return x != null ? x.toFixed(2) : '-';
+}
+function choreoField(item) {
+    var val;
+    switch (item) {
+        default:
+        case 'name':
+            val = function (x) { return x.songName; };
+            break;
+        case 'length':
+            val = function (x) { return x.songLength; };
+            break;
+        case 'date':
+            val = function (x) { return x.songModificationTimestamp; };
+            break;
+        case 'gems':
+            val = function (x) { return x.choreoMeta.numGemsLeft + x.choreoMeta.numGemsRight; };
+            break;
+        case 'dirgems':
+            val = function (x) { return x.choreoMeta.numDirGemsLeft + x.choreoMeta.numDirGemsRight; };
+            break;
+        case 'drums':
+            val = function (x) { return x.choreoMeta.numDrumsLeft + x.choreoMeta.numDrumsRight; };
+            break;
+        case 'ribbons':
+            val = function (x) { return x.choreoMeta.numRibbonsLeft + x.choreoMeta.numRibbonsRight; };
+            break;
+        case 'barriers':
+            val = function (x) { return x.choreoMeta.numBarriers; };
+            break;
+    }
+    return val;
 }
 function orderByDate(dir) {
     var f = dir == '-' ? -1 : 1;
@@ -227,7 +367,25 @@ function orderByName(dir) {
         return f * (a.songName.localeCompare(b.songName));
     };
 }
-function orderByLength(a, b) {
-    return (a[1].length - b[1].length
-        || (0, utils_1.sum)(a[1].map(function (x) { return x.songLength; })) - (0, utils_1.sum)(b[1].map(function (x) { return x.songLength; })));
+function orderByChoreo(item, dir) {
+    var f = dir == '-' ? -1 : 1;
+    var val = choreoField(item);
+    return function orderByChoreoX(a, b) {
+        var valA = val(a);
+        var valB = val(b);
+        return f * (valA - valB);
+    };
+}
+function orderAuthorEntriesByLength(dir) {
+    var f = dir == '-' ? -1 : 1;
+    return function orderAEByLengthX(a, b) {
+        return f * (a[1].length - b[1].length
+            || (0, utils_1.sum)(a[1].map(function (x) { return x.songLength; })) - (0, utils_1.sum)(b[1].map(function (x) { return x.songLength; })));
+    };
+}
+function orderByLength(dir) {
+    var f = dir == '-' ? -1 : 1;
+    return function orderByLengthX(a, b) {
+        return f * (a.songLength - b.songLength);
+    };
 }
