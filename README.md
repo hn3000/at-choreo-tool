@@ -6,7 +6,7 @@ Some very basic choreo analysis tools for Audio Trip choreography files.
 ## Install:
 
 ````sh
-npm install -g @hn3000/at-choreo-tools
+npm install -g https://github.com/hn3000/at-choreo-tool
 ````
 
 ## Usage Examples:
