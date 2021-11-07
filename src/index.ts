@@ -32,6 +32,8 @@ export interface IChoreoEntry {
   songBPM: number;
   songLength: number;
   songModificationTimestamp: number;
+  songTags?: string[];
+
   choreoId: string;
   choreoAuthor: string;
   choreoName: string;

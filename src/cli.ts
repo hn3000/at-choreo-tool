@@ -6,6 +6,7 @@ import { AudioTripPlaylist } from '@hn3000/ats-types/';
 
 import * as fs from 'fs';
 import { niceDate, niceTime, sum } from './utils';
+import { lastfm_getTopTags } from './last-fm';
 
 export function main(args: string[]) {
 
@@ -21,12 +22,16 @@ export function main(args: string[]) {
   let sortOrder = orderByDate('-');
   let sortField = 'date';
   let limit = 10;
+  let lastFmTags = false;
 
   options.forEach(o => {
     const [option,args = ''] = o.split('=');
     switch (option) {
       case '--count':
         limit = Number(args);
+        break;
+      case '--last-fm-tags':
+        lastFmTags = true;
         break;
       case '--sort':
         let m = /^(-|\+)?(.*)$/.exec(args);
@@ -55,7 +60,22 @@ export function main(args: string[]) {
     { key: 'all', field: { getValue: () => '*'} },
   ]);
   
-  const doneCB = () => {
+  const doneCB = async () => {
+    const promises = [] as Promise<any>[];
+    if (lastFmTags) {
+      const all = collection['all']['*'];
+      all.forEach(async x => {
+        const p = lastfm_getTopTags(x.songName, x.songArtist).then(r => {
+          const tags = r?.toptags?.tag;
+          x.songTags = tags?.map(x => x.name);
+        }, err => ([]));
+        promises.push(p);
+      });
+    }
+    await Promise.resolve();
+    //console.debug(`gonna wait for ${promises.length} promises`);
+    await Promise.all(promises);
+
     switch (cmd) {
       case 'dumpinfo':
         console.log(JSON.stringify(collection, null, 2));
@@ -76,14 +96,15 @@ export function main(args: string[]) {
           }
           map.get(song).push(k);
         });
-        console.log('"n","song","artist","mapper","levels","bpm","length","mapped"');
+        console.log('"n","song","artist","mapper","levels","bpm","length","mapped","tags"');
         [...map.entries()].forEach((e,i) => {
           const choreos = e[1];
           const mapperSet = choreos.reduce((s,x) => (s.add(x.choreoAuthor),s), new Set());
           const mappers = [...mapperSet].join(' / ');
+          const tags = (choreos[0].songTags ?? []).join(';');
           const levels = choreos.map(x => x.choreoName).join(', ');
           const { songBPM, songLength, songModificationTimestamp } = choreos[0];
-          console.log(`"${i+1}",${e[0]},"${mappers}","${levels}","${songBPM}","${niceTime(songLength)}","${niceDate(songModificationTimestamp)}"`);
+          console.log(`"${i+1}",${e[0]},"${mappers}","${levels}","${songBPM}","${niceTime(songLength)}","${niceDate(songModificationTimestamp)}","${tags}"`);
         });
         break;
         }
