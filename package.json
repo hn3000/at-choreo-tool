@@ -10,15 +10,25 @@
     "tsc": "tsc",
     "make-playlists": "mkdir -p playlists && cd playlists && ats-tool clonable-playlists ../../choreos-released ../../choreos-wip"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "audio trip",
+    "ats",
+    "atl"
+  ],
+  "author": "hn3000",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hn3000/at-choreo-tool"
+  },
   "license": "ISC",
   "dependencies": {
+    "@hn3000/filewalker": "^1.0.0",
     "@hn3000/json-ref": "^1.1.1",
-    "@hn3000/filewalker": "^1.0.0"
+    "@hn3000/promise-timeout": "^1.0.1",
+    "isomorphic-fetch": "^3.0.0"
   },
   "devDependencies": {
-    "@hn3000/ats-types": "git+https://github.com/hn3000/ats-types.git#next",
+    "@hn3000/ats-types": "git+https://github.com/hn3000/ats-types.git#main",
     "typescript": "^4.4.4"
   },
   "files": [

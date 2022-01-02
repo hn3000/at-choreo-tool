@@ -25,13 +25,17 @@ export function main(args: string[]) {
   let lastFmTags = false;
 
   options.forEach(o => {
-    const [option,args = ''] = o.split('=');
+    const [option,...rest] = o.split('=');
+    const args = rest?.join('') ?? '';
     switch (option) {
       case '--count':
         limit = Number(args);
         break;
       case '--last-fm-tags':
         lastFmTags = true;
+        break;
+      case '--filter':
+        let m = /^(-|\+)?(.*)$/.exec(args);
         break;
       case '--sort':
         let m = /^(-|\+)?(.*)$/.exec(args);
@@ -61,177 +65,182 @@ export function main(args: string[]) {
   ]);
   
   const doneCB = async () => {
-    const promises = [] as Promise<any>[];
-    if (lastFmTags) {
-      const all = collection['all']['*'];
-      all.forEach(async x => {
-        const p = lastfm_getTopTags(x.songName, x.songArtist).then(r => {
-          const tags = r?.toptags?.tag;
-          x.songTags = tags?.map(x => x.name);
-        }, err => ([]));
-        promises.push(p);
-      });
-    }
-    await Promise.resolve();
-    //console.debug(`gonna wait for ${promises.length} promises`);
-    await Promise.all(promises);
-
-    switch (cmd) {
-      case 'dumpinfo':
-        console.log(JSON.stringify(collection, null, 2));
-        break;
-      case 'tallest':
-        break;
-      case 'widest':
-        break;
-      case 'csv-songs': {
+    try {
+      const promises = [] as Promise<any>[];
+      if (lastFmTags) {
         const all = collection['all']['*'];
-        const choreos = all.filter(x => x.choreoEventCount > 0);
-        choreos.sort(sortOrder);
-        const map = new Map<string, IChoreoEntry[]>();
-        choreos.forEach(k => {
-          const song = `"${k.songName}","${k.songArtist}"`;
-          if (!map.has(song)) {
-            map.set(song, []);
-          }
-          map.get(song).push(k);
+        all.forEach(async x => {
+          const p = lastfm_getTopTags(x.songName, x.songArtist).then(r => {
+            const tags = r?.toptags?.tag;
+            x.songTags = tags?.map(x => x.name);
+          }).catch(err => ([]));
+          promises.push(p);
         });
-        console.log('"n","song","artist","mapper","levels","bpm","length","mapped","tags"');
-        [...map.entries()].forEach((e,i) => {
-          const choreos = e[1];
-          const mapperSet = choreos.reduce((s,x) => (s.add(x.choreoAuthor),s), new Set());
-          const mappers = [...mapperSet].join(' / ');
-          const tags = (choreos[0].songTags ?? []).join(';');
-          const levels = choreos.map(x => x.choreoName).join(', ');
-          const { songBPM, songLength, songModificationTimestamp } = choreos[0];
-          console.log(`"${i+1}",${e[0]},"${mappers}","${levels}","${songBPM}","${niceTime(songLength)}","${niceDate(songModificationTimestamp)}","${tags}"`);
-        });
-        break;
-        }
-      case 'top-songs':
-        const field = choreoField(sortField);
-        const all = collection['all']['*'];
-        const choreos = all.filter(x => x.choreoEventCount > 0);
-        choreos.sort(sortOrder);
+      }
+      await Promise.resolve();
+      //console.debug(`gonna wait for ${promises.length} promises`);
+      await Promise.all(promises);
 
-        const topChoreos = choreos.slice(0,limit);
-        const lengths = {
-          songName: 0,
-          songArtist: 0,
-          choreoName: 0,
-          choreoAuthor: 0,
-        };
-        const keys = Object.keys(lengths);
-        topChoreos.forEach((choreo,i) => {
-          for (let k of keys) {
-            lengths[k] = Math.max(lengths[k], choreo[k].length);
-          }
-        });
-        for (let k of keys) {
-          lengths[k] += 1;
-        }
-        topChoreos.forEach((choreo,i) => {
-          const { songName, songArtist, songBPM, songLength, songModificationTimestamp, choreoAuthor, choreoName } = choreo;
-          console.log(
-              rp(songName, lengths.songName)
-            + rp(songArtist, lengths.songArtist)
-            + lp(`(${fmt0(songBPM)})`, 5) + ' ' 
-            + rp(choreoName, lengths.choreoName)
-            + rp(choreoAuthor, lengths.choreoAuthor)
-            + rp(`${niceTime(songLength)}`, 7)
-            +`${niceDate(songModificationTimestamp)} `
-            + `[${sortField}: ${field(choreo)}]`
-            );
-        });
-        break;
-      case 'stats':
-      case 'stats-extended':
-      case 'statsExtended': {
-        const authorEntries = Object.entries(collection['author']);
-        authorEntries.forEach(ae => {
-          let list = ae[1];
-          ae[1] = list.filter(x => x.choreoEventCount > 0);
-          ae[1].sort(sortOrder);
-        });
-        authorEntries.sort(orderAuthorEntriesByLength('+'));
-        let totalTime = 0;
-        let totalChoreos = 0;
-        let totalSongs = new Set<string>();
-        authorEntries.forEach(ae => {
-          const thisCount = ae[1].length;
-          const thisSongs = new Set<string>();
-          totalChoreos += thisCount;
-          const thisTime = sum(ae[1].map(x => x.songLength));
-          totalTime += thisTime;
-          ae[1].forEach(k => {
-            thisSongs.add(`${k.songArtist} - ${k.songName}`);
-          });
-          console.log(`${ae[0]}\t${thisSongs.size}\t${thisCount}\t${niceTime(thisTime)}`)
-          thisSongs.forEach(s => totalSongs.add(s));
-          if (cmd.endsWith('xtended')) {
-            ae[1].forEach(k => {
-              console.log(`\t${k.choreoAuthor} - ${k.songArtist} - ${k.songName} - ${k.choreoName}`);
-              console.log(`\t\tx: ${fmt2(k.choreoMeta.xMin)} .. ${fmt2(k.choreoMeta.xMax)}, y: ${fmt2(k.choreoMeta.yMin)} .. ${fmt2(k.choreoMeta.yMax)}`);
-              console.log(`\t\tbarriers: ${k.choreoMeta.numBarriers}, gems: ${k.choreoMeta.numGemsLeft}/${k.choreoMeta.numGemsRight}`);
-              console.log(`\t\tdirgems: ${k.choreoMeta.numDirGemsLeft}/${k.choreoMeta.numDirGemsRight}, drums: ${k.choreoMeta.numDrumsLeft}/${k.choreoMeta.numDrumsRight}`);
-            });
-          }
-        });
-        console.log(`total\t${totalSongs.size} songs\t${totalChoreos} choreos\t${niceTime(totalTime)}`);
-        break;
-        }
-
-      case 'create-playlists':
-      case 'clonable-playlists':
-      case 'createPlaylists':
-      case 'clonablePlaylists':
-        const clonable = cmd.startsWith('clonable');
-        const allChoreos = [] as IChoreoEntry[];
-        Object.keys(collection['author']).forEach(
-          (author) => {
-            const choreosAll = collection['author'][author];
-            const choreos = choreosAll.filter(x => x.choreoEventCount > 0);
-            choreos.sort(orderByDate('-'));
-            allChoreos.push(...choreos);
-
-            if (choreos.length > 1) {
-              makePlaylist(`by ${author}`, `all-by-${author} (${choreos.length})`, choreos, clonable);
-              if (choreos.length > 10) {
-                const count = choreos.length;
-                const rems = [8,9,10,11].map(x => ({x, r: count % x }));
-                const bestStep = rems.reduce((a,b) => a.r > b.r ? a : b).x;
-
-                for (let i = 0; i < count; i += bestStep) {
-                  const part = Math.floor(i / bestStep)+1;
-                  const partstr = part < 10 ? '0'+part : part;
-                  makePlaylist(`by ${author} Pt ${partstr}`, `all-by-${author}-${partstr}`, choreos.slice(i, i+bestStep), clonable);
-                }
-              }
-            } else {
-              makePlaylist(`by ${author}`, `by-${author}`, choreos, clonable);
+      switch (cmd) {
+        case 'dumpinfo':
+          console.log(JSON.stringify(collection, null, 2));
+          break;
+        case 'tallest':
+          break;
+        case 'widest':
+          break;
+        case 'csv-songs': {
+          const all = collection['all']['*'];
+          const choreos = all.filter(x => x.choreoEventCount > 0);
+          choreos.sort(sortOrder);
+          const map = new Map<string, IChoreoEntry[]>();
+          choreos.forEach(k => {
+            const song = `"${k.songName}","${k.songArtist}"`;
+            if (!map.has(song)) {
+              map.set(song, []);
             }
+            map.get(song).push(k);
+          });
+          console.log('"n","song","artist","mapper","levels","bpm","length","mapped","tags"');
+          [...map.entries()].forEach((e,i) => {
+            const choreos = e[1];
+            const mapperSet = choreos.reduce((s,x) => (s.add(x.choreoAuthor),s), new Set());
+            const mappers = [...mapperSet].join(' / ');
+            const tags = (choreos[0].songTags ?? []).join(';');
+            const levels = choreos.map(x => x.choreoName).join(', ');
+            const { songBPM, songLength, songModificationTimestamp } = choreos[0];
+            console.log(`"${i+1}",${e[0]},"${mappers}","${levels}","${songBPM}","${niceTime(songLength)}","${niceDate(songModificationTimestamp)}","${tags}"`);
+          });
+          break;
           }
-        );
-        allChoreos.sort((a,b) => b.songModificationTimestamp - a.songModificationTimestamp);
+        case 'top-songs':
+          const field = choreoField(sortField);
+          const all = collection['all']['*'];
+          const choreos = all.filter(x => x.choreoEventCount > 0);
+          choreos.sort(sortOrder);
 
-        makePlaylist('Most Recent 5', 'newest-05', allChoreos.slice(0,5), clonable);
-        makePlaylist('Most Recent 10', 'newest-10', allChoreos.slice(0,10), clonable);
-        makePlaylist('Most Recent 20', 'newest-20', allChoreos.slice(0,20), clonable);
-        makePlaylist('Most Recent 30', 'newest-30', allChoreos.slice(0,30), clonable);
-        makePlaylist('Most Recent 40', 'newest-40', allChoreos.slice(0,40), clonable);
-        makePlaylist('Most Recent 50', 'newest-50', allChoreos.slice(0,50), clonable);
+          const topChoreos = choreos.slice(0,limit);
+          const lengths = {
+            songName: 0,
+            songArtist: 0,
+            choreoName: 0,
+            choreoAuthor: 0,
+          };
+          const keys = Object.keys(lengths);
+          topChoreos.forEach((choreo,i) => {
+            for (let k of keys) {
+              lengths[k] = Math.max(lengths[k], choreo[k].length);
+            }
+          });
+          for (let k of keys) {
+            lengths[k] += 1;
+          }
+          topChoreos.forEach((choreo,i) => {
+            const { songName, songArtist, songBPM, songLength, songModificationTimestamp, choreoAuthor, choreoName } = choreo;
+            console.log(
+                rp(songName, lengths.songName)
+              + rp(songArtist, lengths.songArtist)
+              + lp(`(${fmt0(songBPM)})`, 5) + ' ' 
+              + rp(choreoName, lengths.choreoName)
+              + rp(choreoAuthor, lengths.choreoAuthor)
+              + rp(`${niceTime(songLength)}`, 7)
+              +`${niceDate(songModificationTimestamp)} `
+              + `[${sortField}: ${field(choreo)}]`
+              );
+          });
+          break;
+        case 'stats':
+        case 'stats-extended':
+        case 'statsExtended': {
+          const authorEntries = Object.entries(collection['author']);
+          authorEntries.forEach(ae => {
+            let list = ae[1];
+            ae[1] = list.filter(x => x.choreoEventCount > 0);
+            ae[1].sort(sortOrder);
+          });
+          authorEntries.sort(orderAuthorEntriesByLength('+'));
+          let totalTime = 0;
+          let totalChoreos = 0;
+          let totalSongs = new Set<string>();
+          authorEntries.forEach(ae => {
+            const thisCount = ae[1].length;
+            const thisSongs = new Set<string>();
+            totalChoreos += thisCount;
+            const thisTime = sum(ae[1].map(x => x.songLength));
+            totalTime += thisTime;
+            ae[1].forEach(k => {
+              thisSongs.add(`${k.songArtist} - ${k.songName}`);
+            });
+            console.log(`${ae[0]}\t${thisSongs.size}\t${thisCount}\t${niceTime(thisTime)}`)
+            thisSongs.forEach(s => totalSongs.add(s));
+            if (cmd.endsWith('xtended')) {
+              ae[1].forEach(k => {
+                console.log(`\t${k.choreoAuthor} - ${k.songArtist} - ${k.songName} - ${k.choreoName}`);
+                console.log(`\t\tx: ${fmt2(k.choreoMeta.xMin)} .. ${fmt2(k.choreoMeta.xMax)}, y: ${fmt2(k.choreoMeta.yMin)} .. ${fmt2(k.choreoMeta.yMax)}`);
+                console.log(`\t\tbarriers: ${k.choreoMeta.numBarriers}, gems: ${k.choreoMeta.numGemsLeft}/${k.choreoMeta.numGemsRight}`);
+                console.log(`\t\tdirgems: ${k.choreoMeta.numDirGemsLeft}/${k.choreoMeta.numDirGemsRight}, drums: ${k.choreoMeta.numDrumsLeft}/${k.choreoMeta.numDrumsRight}`);
+                console.log(`\t\tgemspeed: ${k.choreoGemSpeed}, bpm: ${k.songBPM}`);
+              });
+            }
+          });
+          console.log(`total\t${totalSongs.size} songs\t${totalChoreos} choreos\t${niceTime(totalTime)}`);
+          break;
+          }
 
-        const count = allChoreos.length;
-        const rems = [8,9,10,11].map(x => ({x, r: count % x }));
-        const bestStep = rems.reduce((a,b) => a.r > b.r ? a : b).x;
+        case 'create-playlists':
+        case 'clonable-playlists':
+        case 'createPlaylists':
+        case 'clonablePlaylists':
+          const clonable = cmd.startsWith('clonable');
+          const allChoreos = [] as IChoreoEntry[];
+          Object.keys(collection['author']).forEach(
+            (author) => {
+              const choreosAll = collection['author'][author];
+              const choreos = choreosAll.filter(x => x.choreoEventCount > 0);
+              choreos.sort(orderByDate('-'));
+              allChoreos.push(...choreos);
 
-        for (let i = 0; i < count; i += bestStep) {
-          const part = Math.floor(i / bestStep)+1;
-          const partstr = part < 10 ? '0'+part : part;
-          makePlaylist(`Most Recent Part ${partstr}`, `newest-pt-${partstr}`, allChoreos.slice(i, i+bestStep), clonable);
-        }
+              if (choreos.length > 1) {
+                makePlaylist(`by ${author}`, `all-by-${author} (${choreos.length})`, choreos, clonable);
+                if (choreos.length > 10) {
+                  const count = choreos.length;
+                  const rems = [8,9,10,11].map(x => ({x, r: count % x }));
+                  const bestStep = rems.reduce((a,b) => a.r > b.r ? a : b).x;
 
-        break;
+                  for (let i = 0; i < count; i += bestStep) {
+                    const part = Math.floor(i / bestStep)+1;
+                    const partstr = part < 10 ? '0'+part : part;
+                    makePlaylist(`by ${author} Pt ${partstr}`, `all-by-${author}-${partstr}`, choreos.slice(i, i+bestStep), clonable);
+                  }
+                }
+              } else {
+                makePlaylist(`by ${author}`, `by-${author}`, choreos, clonable);
+              }
+            }
+          );
+          allChoreos.sort((a,b) => b.songModificationTimestamp - a.songModificationTimestamp);
+
+          makePlaylist('Most Recent 5', 'newest-05', allChoreos.slice(0,5), clonable);
+          makePlaylist('Most Recent 10', 'newest-10', allChoreos.slice(0,10), clonable);
+          makePlaylist('Most Recent 20', 'newest-20', allChoreos.slice(0,20), clonable);
+          makePlaylist('Most Recent 30', 'newest-30', allChoreos.slice(0,30), clonable);
+          makePlaylist('Most Recent 40', 'newest-40', allChoreos.slice(0,40), clonable);
+          makePlaylist('Most Recent 50', 'newest-50', allChoreos.slice(0,50), clonable);
+
+          const count = allChoreos.length;
+          const rems = [8,9,10,11].map(x => ({x, r: count % x }));
+          const bestStep = rems.reduce((a,b) => a.r > b.r ? a : b).x;
+
+          for (let i = 0; i < count; i += bestStep) {
+            const part = Math.floor(i / bestStep)+1;
+            const partstr = part < 10 ? '0'+part : part;
+            makePlaylist(`Most Recent Part ${partstr}`, `newest-pt-${partstr}`, allChoreos.slice(i, i+bestStep), clonable);
+          }
+
+          break;
+      }
+    } catch (ex) {
+      console.warn('caught exception', ex);
     }
   };
 
