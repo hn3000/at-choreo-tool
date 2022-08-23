@@ -1,1 +1,7 @@
 node_modules
+experiment
+*.csv
+*.xlsx
+*.txt
+playlists-*
+playlists

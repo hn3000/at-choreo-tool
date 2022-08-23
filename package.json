@@ -8,7 +8,10 @@
   },
   "scripts": {
     "tsc": "tsc",
-    "make-playlists": "mkdir -p playlists && cd playlists && ats-tool clonable-playlists ../../choreos-released ../../choreos-wip"
+    "playlists-released": "rm -r playlists-released ; mkdir -p playlists-released && cd playlists-released && ../bin/ats-tool clonable-playlists --generate=all=released --generate=author ../../choreos-released",
+    "playlists-testplay": "rm -r playlists-testplay ; mkdir -p playlists-testplay && cd playlists-testplay && ../bin/ats-tool clonable-playlists --generate=all=testplay ../../choreos-testplay",
+    "playlists": "npm run playlists-released && npm run playlists-testplay",
+    "preplaylists": "tsc"
   },
   "keywords": [
     "audio trip",
