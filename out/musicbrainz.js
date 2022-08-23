@@ -61,9 +61,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lastfm_getTopTags = void 0;
+exports.musicbrainz_tags = void 0;
 var MISSING_KEY = 'missing last.fm API key';
-var LASTFM_API_KEY = process.env['LASTFM_API_KEY'] || MISSING_KEY;
+var MUSICBRAINZ_API_KEY = process.env['MUSICBRAINZ_API_KEY'] || MISSING_KEY;
 var promise_timeout_1 = require("@hn3000/promise-timeout");
 var fetch = require("isomorphic-fetch");
 var fs = require("fs");
@@ -99,18 +99,18 @@ function unpackResult(resultP) {
         });
     });
 }
-function fetchLastFM(url) {
+function fetchMusicBrainz(url) {
     return __awaiter(this, void 0, void 0, function () {
         var sep, urlComplete, retry, result, xx_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    if (LASTFM_API_KEY == MISSING_KEY) {
+                    if (MUSICBRAINZ_API_KEY == MISSING_KEY) {
                         console.warn("not fetching " + url + ", no api key");
                         throw "missing api key";
                     }
                     sep = url.includes('?') ? '&' : '?';
-                    urlComplete = "" + url + sep + "api_key=" + LASTFM_API_KEY + "&format=json";
+                    urlComplete = "" + url + sep + "api_key=" + MUSICBRAINZ_API_KEY + "&format=json";
                     retry = false;
                     _a.label = 1;
                 case 1:
@@ -118,7 +118,12 @@ function fetchLastFM(url) {
                     return [4 /*yield*/, nextTimeout()];
                 case 2:
                     _a.sent();
-                    return [4 /*yield*/, unpackResult(fetch(urlComplete))];
+                    console.debug("musicbrainz: " + urlComplete);
+                    return [4 /*yield*/, unpackResult(fetch(urlComplete, {
+                            headers: {
+                                "User-Agent": "hn3000-AudioTrip-choreo-tool/1.0 ( https://github.com/hn3000/at-choreo-tool )"
+                            }
+                        }))];
                 case 3:
                     result = _a.sent();
                     return [2 /*return*/, result];
@@ -137,9 +142,9 @@ function fetchLastFM(url) {
     });
 }
 var topTagCache = new Map();
-var LASTFM_CACHE_FILE = './.lastFmCache.json';
-if (fs.existsSync(LASTFM_CACHE_FILE)) {
-    var cacheFileContents = fs.readFileSync(LASTFM_CACHE_FILE, { encoding: 'utf-8' });
+var MUSICBRAINZ_CACHE_FILE = './.musicbrainzCache.json';
+if (fs.existsSync(MUSICBRAINZ_CACHE_FILE)) {
+    var cacheFileContents = fs.readFileSync(MUSICBRAINZ_CACHE_FILE, { encoding: 'utf-8' });
     if (cacheFileContents.trim().length) {
         try {
             var cacheContents = JSON.parse(cacheFileContents);
@@ -151,11 +156,11 @@ if (fs.existsSync(LASTFM_CACHE_FILE)) {
             }
         }
         catch (ex) {
-            //console.warn(`corrupt cache file? ${ex}`);
+            console.debug("corrupt cache file? " + ex);
         }
     }
     else {
-        //console.debug(`note: empty cache file.`);
+        console.debug("note: empty cache file.");
     }
 }
 function cacheEntry(p) {
@@ -191,23 +196,27 @@ process.on('beforeExit', function () { return __awaiter(void 0, void 0, void 0, 
                     var _b = __read(_a, 2), key = _b[0], entry = _b[1];
                     cacheContents.topTagsBySong[key] = entry;
                 });
-                fs.writeFileSync(LASTFM_CACHE_FILE, JSON.stringify(cacheContents, null, 2), { encoding: 'utf-8' });
+                fs.writeFileSync(MUSICBRAINZ_CACHE_FILE, JSON.stringify(cacheContents, null, 2), { encoding: 'utf-8' });
                 return [2 /*return*/];
         }
     });
 }); });
-function lastfm_getTopTags(song, artist) {
+function musicbrainz_tags(song, artist) {
     return __awaiter(this, void 0, void 0, function () {
         var songKey, result;
         return __generator(this, function (_a) {
-            songKey = song + "--:--" + artist;
-            result = topTagCache.get(songKey);
-            if (null == result && song && artist) {
-                result = fetchLastFM("http://ws.audioscrobbler.com/2.0/?method=track.getTopTags&track=" + encodeURIComponent(song) + "&artist=" + encodeURIComponent(artist));
-                topTagCache.set(songKey, result);
+            switch (_a.label) {
+                case 0:
+                    songKey = song + "--:--" + artist;
+                    result = topTagCache.get(songKey);
+                    if (null == result) {
+                        result = fetchMusicBrainz("https://musicbrainz.com/ws/2/recording?query=name:" + encodeURIComponent(song) + "+artist:" + encodeURIComponent(artist));
+                        topTagCache.set(songKey, result);
+                    }
+                    return [4 /*yield*/, result];
+                case 1: return [2 /*return*/, _a.sent()];
             }
-            return [2 /*return*/, result];
         });
     });
 }
-exports.lastfm_getTopTags = lastfm_getTopTags;
+exports.musicbrainz_tags = musicbrainz_tags;

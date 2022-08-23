@@ -90,8 +90,11 @@ function main(args) {
     var sortField = 'date';
     var limit = 10;
     var lastFmTags = false;
+    var generate = [];
     options.forEach(function (o) {
-        var _a = __read(o.split('='), 2), option = _a[0], _b = _a[1], args = _b === void 0 ? '' : _b;
+        var _a;
+        var _b = __read(o.split('=')), option = _b[0], rest = _b.slice(1);
+        var args = (_a = rest === null || rest === void 0 ? void 0 : rest.join('=')) !== null && _a !== void 0 ? _a : '';
         switch (option) {
             case '--count':
                 limit = Number(args);
@@ -99,20 +102,33 @@ function main(args) {
             case '--last-fm-tags':
                 lastFmTags = true;
                 break;
+            case '--filter':
+                var filterMatch = /^(.*)(=(.*))?$/.exec(args);
+                break;
+            case '--generate':
+                generate.push(args);
+                break;
             case '--sort':
-                var m = /^(-|\+)?(.*)$/.exec(args);
-                var dir = m[1];
-                sortField = m[2];
-                switch (m[2]) {
+                var sortMatch = /^(-|\+)?(.*)$/.exec(args);
+                var dir = sortMatch[1];
+                sortField = sortMatch[2];
+                switch (sortMatch[2]) {
+                    case 'gemspeed':
                     case 'gems':
                     case 'ribbons':
                     case 'dirgems':
                     case 'barriers':
                     case 'drums':
-                        sortOrder = orderByChoreo(m[2], dir || '-');
+                        sortOrder = orderByChoreo(sortMatch[2], dir || '-');
                         break;
                     case 'name':
                         sortOrder = orderByName(dir || '+');
+                        break;
+                    case 'songFile':
+                        sortOrder = orderByName(dir || '+', 'songFilename');
+                        break;
+                    case 'songAudio':
+                        sortOrder = orderByName(dir || '+', 'songAudioFilename');
                         break;
                     case 'length':
                         sortOrder = orderByLength(dir || '-');
@@ -133,13 +149,15 @@ function main(args) {
         { key: 'all', field: { getValue: function () { return '*'; } } },
     ]), 2), collection = _b[0], collectorCB = _b[1];
     var doneCB = function () { return __awaiter(_this, void 0, void 0, function () {
-        var promises, all, all_1, choreos_1, map_1, field_1, all, choreos, topChoreos, lengths_1, keys_2, keys_1, keys_1_1, k, authorEntries, totalTime_1, totalChoreos_1, totalSongs_1, clonable_1, allChoreos_1, count_1, rems, bestStep, i, part, partstr;
+        var promises_1, all, all_1, choreos_1, map_1, field_1, all, choreos, topChoreos, lengths_1, keys_2, keys_1, keys_1_1, k, authorEntries, totalTime_1, totalChoreos_1, totalSongs_1, clonable_1, shouldGenerate, optionalName, name_1, allChoreos_1, name_2, name_3, name_4, count_1, rems, bestStep, needsParts, i, part, partstr, ex_1;
         var e_1, _a;
         var _this = this;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
+        var _b, _c, _d, _e, _f;
+        return __generator(this, function (_g) {
+            switch (_g.label) {
                 case 0:
-                    promises = [];
+                    _g.trys.push([0, 3, , 4]);
+                    promises_1 = [];
                     if (lastFmTags) {
                         all = collection['all']['*'];
                         all.forEach(function (x) { return __awaiter(_this, void 0, void 0, function () {
@@ -149,20 +167,20 @@ function main(args) {
                                     var _a;
                                     var tags = (_a = r === null || r === void 0 ? void 0 : r.toptags) === null || _a === void 0 ? void 0 : _a.tag;
                                     x.songTags = tags === null || tags === void 0 ? void 0 : tags.map(function (x) { return x.name; });
-                                }, function (err) { return ([]); });
-                                promises.push(p);
+                                }).catch(function (err) { return ([]); });
+                                promises_1.push(p);
                                 return [2 /*return*/];
                             });
                         }); });
                     }
                     return [4 /*yield*/, Promise.resolve()];
                 case 1:
-                    _b.sent();
+                    _g.sent();
                     //console.debug(`gonna wait for ${promises.length} promises`);
-                    return [4 /*yield*/, Promise.all(promises)];
+                    return [4 /*yield*/, Promise.all(promises_1)];
                 case 2:
                     //console.debug(`gonna wait for ${promises.length} promises`);
-                    _b.sent();
+                    _g.sent();
                     switch (cmd) {
                         case 'dumpinfo':
                             console.log(JSON.stringify(collection, null, 2));
@@ -280,6 +298,7 @@ function main(args) {
                                         console.log("\t\tx: " + fmt2(k.choreoMeta.xMin) + " .. " + fmt2(k.choreoMeta.xMax) + ", y: " + fmt2(k.choreoMeta.yMin) + " .. " + fmt2(k.choreoMeta.yMax));
                                         console.log("\t\tbarriers: " + k.choreoMeta.numBarriers + ", gems: " + k.choreoMeta.numGemsLeft + "/" + k.choreoMeta.numGemsRight);
                                         console.log("\t\tdirgems: " + k.choreoMeta.numDirGemsLeft + "/" + k.choreoMeta.numDirGemsRight + ", drums: " + k.choreoMeta.numDrumsLeft + "/" + k.choreoMeta.numDrumsRight);
+                                        console.log("\t\tgemspeed: " + k.choreoGemSpeed + ", bpm: " + k.songBPM);
                                     });
                                 }
                             });
@@ -291,47 +310,94 @@ function main(args) {
                         case 'createPlaylists':
                         case 'clonablePlaylists':
                             clonable_1 = cmd.startsWith('clonable');
-                            allChoreos_1 = [];
-                            Object.keys(collection['author']).forEach(function (author) {
-                                var choreosAll = collection['author'][author];
-                                var choreos = choreosAll.filter(function (x) { return x.choreoEventCount > 0; });
-                                choreos.sort(orderByDate('-'));
-                                allChoreos_1.push.apply(allChoreos_1, __spreadArray([], __read(choreos), false));
-                                if (choreos.length > 1) {
-                                    makePlaylist("by " + author, "all-by-" + author + " (" + choreos.length + ")", choreos, clonable_1);
-                                    if (choreos.length > 10) {
-                                        var count_2 = choreos.length;
-                                        var rems_1 = [8, 9, 10, 11].map(function (x) { return ({ x: x, r: count_2 % x }); });
-                                        var bestStep_1 = rems_1.reduce(function (a, b) { return a.r > b.r ? a : b; }).x;
-                                        for (var i = 0; i < count_2; i += bestStep_1) {
-                                            var part = Math.floor(i / bestStep_1) + 1;
-                                            var partstr = part < 10 ? '0' + part : part;
-                                            makePlaylist("by " + author + " Pt " + partstr, "all-by-" + author + "-" + partstr, choreos.slice(i, i + bestStep_1), clonable_1);
+                            shouldGenerate = function (which) {
+                                if (generate.includes(which))
+                                    return true;
+                                var whichPlus = which + '=';
+                                var result = generate.some(function (x) { return x.startsWith(whichPlus); });
+                                if (!result)
+                                    console.warn("skipping " + which + ", not in [" + generate.join(',') + "]");
+                                return result;
+                            };
+                            optionalName = function (which) {
+                                var whichPlus = which + '=';
+                                var matching = generate.filter(function (x) { return x.startsWith(whichPlus); });
+                                var names = matching.map(function (x) { return x.substring(whichPlus.length); });
+                                return names[0];
+                            };
+                            console.warn(cmd + " will generate [" + generate.join(',') + "]");
+                            if (shouldGenerate('author')) {
+                                name_1 = (_b = optionalName('author')) !== null && _b !== void 0 ? _b : 'by';
+                                Object.keys(collection['author']).forEach(function (author) {
+                                    var choreosAll = collection['author'][author];
+                                    var choreos = choreosAll.filter(function (x) { return x.choreoEventCount > 0; });
+                                    choreos.sort(orderByDate('-'));
+                                    if (choreos.length > 1) {
+                                        makePlaylist(name_1 + " " + author, name_1 + "-" + author + " (" + choreos.length + ")", choreos, clonable_1);
+                                        if (choreos.length > 10) {
+                                            var count_2 = choreos.length;
+                                            var rems = [8, 9, 10, 11].map(function (x) { return ({ x: x, r: count_2 % x }); });
+                                            var bestStep = rems.reduce(function (a, b) { return a.r > b.r ? a : b; }).x;
+                                            for (var i = 0; i < count_2; i += bestStep) {
+                                                var part = Math.floor(i / bestStep) + 1;
+                                                var partstr = part < 10 ? '0' + part : part;
+                                                makePlaylist("by " + author + " Pt " + partstr, "all-by-" + author + "-" + partstr, choreos.slice(i, i + bestStep), clonable_1);
+                                            }
                                         }
                                     }
+                                    else {
+                                        makePlaylist("by " + author, "by-" + author, choreos, clonable_1);
+                                    }
+                                });
+                            }
+                            allChoreos_1 = [];
+                            if (generate.length === 0 || shouldGenerate('newest') || shouldGenerate('newest-more') || shouldGenerate('all')) {
+                                Object.keys(collection['author']).forEach(function (author) {
+                                    var choreosAll = collection['author'][author];
+                                    var choreos = choreosAll.filter(function (x) { return x.choreoEventCount > 0; });
+                                    choreos.sort(orderByDate('-'));
+                                    allChoreos_1.push.apply(allChoreos_1, __spreadArray([], __read(choreos), false));
+                                });
+                            }
+                            allChoreos_1.sort(function (a, b) { return b.songModificationTimestamp - a.songModificationTimestamp; });
+                            if (shouldGenerate('newest') || shouldGenerate('newest-more')) {
+                                name_2 = (_d = (_c = optionalName('newest')) !== null && _c !== void 0 ? _c : optionalName('newest-more')) !== null && _d !== void 0 ? _d : 'fresh';
+                                makePlaylist(name_2 + " 05", '${name}-05', allChoreos_1.slice(0, 5), clonable_1);
+                                makePlaylist(name_2 + " 10", '${name}-10', allChoreos_1.slice(0, 10), clonable_1);
+                                makePlaylist(name_2 + " 20", '${name}-20', allChoreos_1.slice(0, 20), clonable_1);
+                            }
+                            if (generate.includes('newest-more')) {
+                                name_3 = (_e = optionalName('newest-more')) !== null && _e !== void 0 ? _e : 'fresh';
+                                makePlaylist(name_3 + " 30", name_3 + "-30", allChoreos_1.slice(0, 30), clonable_1);
+                                makePlaylist(name_3 + " 40", name_3 + "-40", allChoreos_1.slice(0, 40), clonable_1);
+                                makePlaylist(name_3 + " 50", name_3 + "-50", allChoreos_1.slice(0, 50), clonable_1);
+                            }
+                            if (shouldGenerate('all') || generate.length === 0) {
+                                name_4 = (_f = optionalName('all')) !== null && _f !== void 0 ? _f : 'all';
+                                count_1 = allChoreos_1.length;
+                                rems = [8, 9, 10, 11].map(function (x) { return ({ x: x, r: count_1 % x }); });
+                                bestStep = rems.reduce(function (a, b) { return a.r > b.r ? a : b; }).x;
+                                needsParts = count_1 > bestStep;
+                                if (needsParts) {
+                                    console.warn("generate playlists with all " + count_1 + " choreos in batches of " + bestStep + " as " + name_4);
                                 }
                                 else {
-                                    makePlaylist("by " + author, "by-" + author, choreos, clonable_1);
+                                    console.warn("generate playlist with " + count_1 + " choreos as " + name_4);
                                 }
-                            });
-                            allChoreos_1.sort(function (a, b) { return b.songModificationTimestamp - a.songModificationTimestamp; });
-                            makePlaylist('Most Recent 5', 'newest-05', allChoreos_1.slice(0, 5), clonable_1);
-                            makePlaylist('Most Recent 10', 'newest-10', allChoreos_1.slice(0, 10), clonable_1);
-                            makePlaylist('Most Recent 20', 'newest-20', allChoreos_1.slice(0, 20), clonable_1);
-                            makePlaylist('Most Recent 30', 'newest-30', allChoreos_1.slice(0, 30), clonable_1);
-                            makePlaylist('Most Recent 40', 'newest-40', allChoreos_1.slice(0, 40), clonable_1);
-                            makePlaylist('Most Recent 50', 'newest-50', allChoreos_1.slice(0, 50), clonable_1);
-                            count_1 = allChoreos_1.length;
-                            rems = [8, 9, 10, 11].map(function (x) { return ({ x: x, r: count_1 % x }); });
-                            bestStep = rems.reduce(function (a, b) { return a.r > b.r ? a : b; }).x;
-                            for (i = 0; i < count_1; i += bestStep) {
-                                part = Math.floor(i / bestStep) + 1;
-                                partstr = part < 10 ? '0' + part : part;
-                                makePlaylist("Most Recent Part " + partstr, "newest-pt-" + partstr, allChoreos_1.slice(i, i + bestStep), clonable_1);
+                                for (i = 0; i < count_1; i += bestStep) {
+                                    part = Math.floor(i / bestStep) + 1;
+                                    partstr = needsParts ? (part < 10 ? '0' + part : part) : 'all';
+                                    makePlaylist(name_4 + " #" + partstr, name_4 + "-" + partstr, allChoreos_1.slice(i, i + bestStep), clonable_1);
+                                }
                             }
                             break;
                     }
-                    return [2 /*return*/];
+                    return [3 /*break*/, 4];
+                case 3:
+                    ex_1 = _g.sent();
+                    console.warn('caught exception', ex_1);
+                    return [3 /*break*/, 4];
+                case 4: return [2 /*return*/];
             }
         });
     }); };
@@ -413,6 +479,9 @@ function choreoField(item) {
         case 'date':
             val = function (x) { return x.songModificationTimestamp; };
             break;
+        case 'gemspeed':
+            val = function (x) { return x.choreoGemSpeed; };
+            break;
         case 'gems':
             val = function (x) { return x.choreoMeta.numGemsLeft + x.choreoMeta.numGemsRight; };
             break;
@@ -437,10 +506,11 @@ function orderByDate(dir) {
         return f * (a.songModificationTimestamp - b.songModificationTimestamp);
     };
 }
-function orderByName(dir) {
+function orderByName(dir, field) {
+    if (field === void 0) { field = 'songName'; }
     var f = dir == '-' ? -1 : 1;
     return function orderByNameX(a, b) {
-        return f * (a.songName.localeCompare(b.songName));
+        return f * (a[field].localeCompare(b[field]));
     };
 }
 function orderByChoreo(item, dir) {

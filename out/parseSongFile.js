@@ -8,7 +8,11 @@ function fixNaN(json) {
 exports.fixNaN = fixNaN;
 function parseSongFile(chars, fn) {
     try {
-        return JSON.parse(fixNaN(chars));
+        var result = JSON.parse(fixNaN(chars));
+        if (!result || 0 === Object.keys(result).length) {
+            console.log("could not parse song file " + fn + ", got " + result);
+        }
+        return result;
     }
     catch (x) {
         console.log("could not parse song file " + fn + ", got " + x);

@@ -29,6 +29,7 @@ export interface IChoreoEntry {
   songName: string;
   songArtist: string;
   songFilename: string;
+  songAudioFilename: string;
   songBPM: number;
   songLength: number;
   songModificationTimestamp: number;
@@ -88,6 +89,7 @@ export function choreoCollector(fields: IChoreoCollectorEntry[])
             songArtist: song.metadata.artist,
             songLength: song.metadata.songFullLengthInSeconds ?? song.metadata.songEndTimeInSeconds,
             songFilename,
+            songAudioFilename: song.metadata.songFilename,
             songModificationTimestamp: stats.mtimeMs,
             choreoId: choreo.header.id,
             choreoAuthor: song.metadata.authorID.displayName,

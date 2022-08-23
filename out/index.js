@@ -55,6 +55,7 @@ function choreoCollector(fields) {
                     songArtist: song.metadata.artist,
                     songLength: (_a = song.metadata.songFullLengthInSeconds) !== null && _a !== void 0 ? _a : song.metadata.songEndTimeInSeconds,
                     songFilename: songFilename,
+                    songAudioFilename: song.metadata.songFilename,
                     songModificationTimestamp: stats.mtimeMs,
                     choreoId: choreo.header.id,
                     choreoAuthor: song.metadata.authorID.displayName,
